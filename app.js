@@ -5,6 +5,7 @@
   const STORAGE_KEYS = {
     cache: 'ts_openrouter_models_v3',
     pinned: 'ts_custom_pinned_v3',
+    theme: 'ts_bento_theme_v3',
   };
 
   const SAMPLE_REPORT = `10M cached input
@@ -40,6 +41,7 @@
     openAllBtn: $('openAllBtn'),
     topCatalogCount: $('topCatalogCount'),
     clearOrSampleBtn: $('clearOrSampleBtn'),
+    themeToggleBtn: $('themeToggleBtn'),
     cacheToggleBtn: $('cacheToggleBtn'),
     usageInput: $('usageInput'),
     cachedField: $('cachedField'),
@@ -660,8 +662,28 @@
     renderAll(false);
   }
 
+  function applyTheme(theme) {
+    const mode = theme === 'light' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', mode);
+    if (el.themeToggleBtn) {
+      el.themeToggleBtn.textContent = mode === 'dark' ? 'Light' : 'Dark';
+      el.themeToggleBtn.setAttribute('aria-pressed', String(mode === 'light'));
+    }
+    try {
+      localStorage.setItem(STORAGE_KEYS.theme, mode);
+    } catch {
+      // ignore
+    }
+  }
+
   function wireEvents() {
     el.refreshBtn.addEventListener('click', () => fetchOpenRouter(true));
+    if (el.themeToggleBtn) {
+      el.themeToggleBtn.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme') || 'dark';
+        applyTheme(current === 'dark' ? 'light' : 'dark');
+      });
+    }
     el.openAllBtn.addEventListener('click', openDrawer);
     el.digBtn.addEventListener('click', openDrawer);
     el.closeDrawerBtn.addEventListener('click', closeDrawer);
@@ -792,6 +814,13 @@
   }
 
   function init() {
+    let savedTheme = 'dark';
+    try {
+      savedTheme = localStorage.getItem(STORAGE_KEYS.theme) || 'dark';
+    } catch {
+      // ignore
+    }
+    applyTheme(savedTheme);
     el.usageInput.value = '';
     handlePaste();
     wireEvents();

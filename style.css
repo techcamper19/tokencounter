@@ -1,9 +1,11 @@
 /* neo-swiss color-block bento on pitch black — tokens routed through :root */
 
-:root {
+:root,
+[data-theme="dark"] {
   --bg-void: #000000;
   --bg-drawer: #09090b;
   --bg-drawer-hover: #141418;
+  --drawer-scheme: dark;
 
   --tile-mint: #e3eee1;
   --tile-olive: #a3990d;
@@ -14,6 +16,8 @@
   --ink-dark: #0a0a0a;
   --ink-dark-soft: rgba(10, 10, 10, 0.72);
   --ink-white: #ffffff;
+  --ink-on-void: #ffffff;
+  --ink-on-void-inv: #0a0a0a;
   --ink-silver: #d4d7dc;
   --ink-dim: #7b8089;
   --ink-faint: #555a63;
@@ -34,6 +38,36 @@
   --radius-pill: 999px;
 }
 
+[data-theme="light"] {
+  --bg-void: #f5f4ef;
+  --bg-drawer: #ffffff;
+  --bg-drawer-hover: #eceae2;
+  --drawer-scheme: light;
+
+  --tile-mint: #dcead9;
+  --tile-olive: #bcb218;
+  --tile-lavender: #b8b2d4;
+  --tile-lavender-well: #9e97bc;
+  --tile-vermilion: #ff562c;
+
+  --ink-dark: #0a0a0a;
+  --ink-dark-soft: rgba(10, 10, 10, 0.72);
+  --ink-white: #ffffff;
+  --ink-on-void: #0a0a0a;
+  --ink-on-void-inv: #ffffff;
+  --ink-silver: #272a30;
+  --ink-dim: #666b75;
+  --ink-faint: #8a8f99;
+
+  --border-light: rgba(10, 10, 10, 0.65);
+  --border-light-dim: rgba(10, 10, 10, 0.14);
+  --border-ink: rgba(10, 10, 10, 0.82);
+  --border-ink-soft: rgba(10, 10, 10, 0.34);
+
+  --focus-ring: #ff5226;
+  --backdrop: rgba(10, 10, 10, 0.38);
+}
+
 *,
 *::before,
 *::after {
@@ -46,7 +80,7 @@ body {
   padding: 0;
   overflow-x: clip;
   background-color: var(--bg-void);
-  color: var(--ink-white);
+  color: var(--ink-on-void);
   font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.4;
@@ -67,7 +101,7 @@ body {
   flex-direction: column;
 }
 
-/* Top Bar on Pitch Black */
+/* Top Bar */
 .topbar {
   display: flex;
   align-items: center;
@@ -82,7 +116,7 @@ body {
   font-size: clamp(1.2rem, 2vw, 1.5rem);
   font-weight: 400;
   letter-spacing: 0.02em;
-  color: var(--ink-white);
+  color: var(--ink-on-void);
   line-height: 1.1;
 }
 
@@ -104,7 +138,7 @@ body {
   border-radius: var(--radius-pill);
   border: 1px solid var(--border-light);
   background: transparent;
-  color: var(--ink-white);
+  color: var(--ink-on-void);
   font-family: var(--font-sans);
   font-size: 0.875rem;
   font-weight: 400;
@@ -117,9 +151,9 @@ body {
 }
 
 .pill-dark:hover:not(:disabled) {
-  background-color: var(--ink-white);
-  border-color: var(--ink-white);
-  color: var(--ink-dark);
+  background-color: var(--ink-on-void);
+  border-color: var(--ink-on-void);
+  color: var(--ink-on-void-inv);
 }
 
 .pill-dark:disabled {
@@ -643,7 +677,7 @@ body {
 }
 
 .dig-trigger:hover {
-  color: var(--ink-white);
+  color: var(--ink-on-void);
 }
 
 .plus-circle {
@@ -655,14 +689,14 @@ body {
   place-items: center;
   font-size: 1rem;
   line-height: 1;
-  color: var(--ink-white);
+  color: var(--ink-on-void);
   transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
 }
 
 .dig-trigger:hover .plus-circle {
-  background-color: var(--ink-white);
-  border-color: var(--ink-white);
-  color: var(--ink-dark);
+  background-color: var(--ink-on-void);
+  border-color: var(--ink-on-void);
+  color: var(--ink-on-void-inv);
 }
 
 .flagship-list {
@@ -705,7 +739,7 @@ body {
 }
 
 .model-ticker-row.is-selected .ticker-name {
-  color: var(--ink-white);
+  color: var(--ink-on-void);
   font-weight: 500;
 }
 
@@ -714,7 +748,7 @@ body {
 }
 
 .model-ticker-row:hover .ticker-name {
-  color: var(--ink-white);
+  color: var(--ink-on-void);
 }
 
 .ticker-remove {
@@ -785,7 +819,7 @@ body {
 }
 
 .model-ticker-row.is-selected .ticker-price {
-  color: var(--ink-white);
+  color: var(--ink-on-void);
   font-weight: 500;
 }
 
@@ -799,7 +833,7 @@ body {
   font-size: 0.95rem;
 }
 
-/* Bottom Footer on Pitch Black */
+/* Bottom Footer */
 .bottom-foot {
   margin-top: 22px;
   padding-top: 14px;
@@ -825,10 +859,10 @@ body {
 }
 
 .foot-links a:hover {
-  color: var(--ink-white);
+  color: var(--ink-on-void);
 }
 
-/* Dark Bento Drawer for All 472+ Models */
+/* Bento Drawer for All OpenRouter Models */
 .drawer-backdrop {
   position: fixed;
   inset: 0;
@@ -844,7 +878,7 @@ body {
   width: min(520px, 100%);
   background-color: var(--bg-drawer);
   border-left: 1px solid var(--border-light-dim);
-  color-scheme: dark;
+  color-scheme: var(--drawer-scheme);
   z-index: 50;
   display: flex;
   flex-direction: column;
@@ -864,7 +898,7 @@ body {
   margin: 0;
   font-size: 1.3rem;
   font-weight: 500;
-  color: var(--ink-white);
+  color: var(--ink-on-void);
 }
 
 .drawer-sub {
@@ -884,7 +918,7 @@ body {
   border-radius: var(--radius-pill);
   border: 1px solid var(--border-light);
   background-color: var(--bg-void);
-  color: var(--ink-white);
+  color: var(--ink-on-void);
   font-family: var(--font-sans);
   font-size: 0.9rem;
 }
@@ -915,7 +949,7 @@ body {
 .drawer-name {
   font-size: 0.92rem;
   font-weight: 500;
-  color: var(--ink-white);
+  color: var(--ink-on-void);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -944,7 +978,7 @@ body {
   border-radius: var(--radius-pill);
   border: 1px solid var(--border-light);
   background: transparent;
-  color: var(--ink-white);
+  color: var(--ink-on-void);
   font-family: var(--font-sans);
   font-size: 0.76rem;
   cursor: pointer;
@@ -953,8 +987,8 @@ body {
 }
 
 .pin-pill:hover:not(:disabled) {
-  background-color: var(--ink-white);
-  color: var(--ink-dark);
+  background-color: var(--ink-on-void);
+  color: var(--ink-on-void-inv);
 }
 
 .pin-pill.is-pinned {
