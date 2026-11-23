@@ -7,11 +7,9 @@
     pinned: 'ts_custom_pinned_v3',
   };
 
-  const SAMPLE_REPORT = `About 15.24 million tokens for the Jensen carousel + video team, according to the recorded worker sessions.
-
-14.50M cached input
-674,508 fresh input
-65,648 output, including reasoning`;
+  const SAMPLE_REPORT = `10M cached input
+500,000 fresh input
+50,000 output`;
 
   const FAMOUS_SLOTS = [
     { preferred: 'deepseek/deepseek-v4.1-flash', fallback: /^deepseek\/deepseek-v\d.*flash$/i, code: 'DS4', short: 'DeepSeek V4.1' },
@@ -33,7 +31,7 @@
   let orderedRows = [];
   let selectedModelId = null;
   let cacheEnabled = true;
-  let tokens = { cached: 14500000, fresh: 674508, output: 65648 };
+  let tokens = { cached: 0, fresh: 0, output: 0 };
 
   const $ = (id) => document.getElementById(id);
   const el = {
@@ -794,7 +792,7 @@
   }
 
   function init() {
-    el.usageInput.value = SAMPLE_REPORT;
+    el.usageInput.value = '';
     handlePaste();
     wireEvents();
     fetchOpenRouter(false);
