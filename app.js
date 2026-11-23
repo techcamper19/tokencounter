@@ -131,65 +131,92 @@
     return Math.round(base * mult);
   }
 
-  // Smart parser for real-world usage reports, JSON usage blocks, or shorthand
+  // Smart parser for real-world usage reports, prose summaries, JSON usage blocks, or shorthand
   function parseUsageText(text) {
     const src = String(text || '').trim();
     if (!src) return { cached: 0, fresh: 0, output: 0 };
 
-    const NUM = '(\\d[\\d,]*(?:\\.\\d+)?\\s*(?:billion|million|thousand|[bmk]\\b)?)';
+    // Horizontal whitespace only — never bridge across newlines!
+    const HS = '[ \\t]';
+
+    // Number token (excludes percentages like "85%" and model versions like "v4")
+    const NUM = `(?<![a-zA-Z0-9._])(\\d[\\d,]*(?:\\.\\d+)?(?:${HS}*(?:billion|million|thousand|[bmk]\\b))?)(?!${HS}*%)`;
+
+    // Short same-line conversational bridge between a number and its role, e.g. "(85%) were ", "tokens were generated "
+    const BRIDGE_AFTER_NUM =
+      `(?:${HS}+(?:tokens?${HS}+)?(?:\\([^)\\n]{1,32}\\)${HS}*)?(?:(?:were|was|are|is|of|in|as|for|from|came${HS}+from|read${HS}+from|reused${HS}+as|billed${HS}+as|generated|produced|written|sent|total|new)${HS}+){0,4})`;
+
+    // Same-line connector between a label and a number, e.g. ": ", " = ", " was about "
+    const BRIDGE_AFTER_LABEL =
+      `(?:${HS}*[:=]${HS}*|${HS}+(?:were|was|are|is|of|at)${HS}+(?:(?:about|around|roughly|approx\\.?|~)${HS}+)?)`;
+
     let cached = null;
     let fresh = null;
     let output = null;
     let reasoningExtra = null;
 
-    const cachedBefore = new RegExp(`${NUM}\\s*(?:tokens?\\s*(?:of\\s*)?)?(?:cached(?:\\s+input|\\s+context|\\s+prompt|\\s+read|\\s+tokens?)?|cache[_\\s-]?read(?:[_\\s-]?input)?(?:[_\\s-]?tokens?)?)`, 'i');
-    const cachedAfter = new RegExp(`(?:"?(?:cache[_\\s-]?read(?:[_\\s-]?input)?(?:[_\\s-]?tokens?)?|cached[_\\s-]?(?:input|prompt|context|tokens?)|cached)"?)\\s*[:=]\\s*${NUM}`, 'i');
+    // 1. Cached input (number -> label OR label -> number)
+    const cachedRole =
+      `\\b(?:cached(?:${HS}+(?:input|context|prompt|read|tokens?))?|cache[_ -]?read(?:[_ -]?input)?(?:[_ -]?tokens?)?|read${HS}+from${HS}+cache|from${HS}+cache)\\b`;
+    const cachedBefore = new RegExp(`${NUM}${BRIDGE_AFTER_NUM}${cachedRole}`, 'i');
+    const cachedAfter = new RegExp(`(?:"?\\b(?:cache[_ -]?read(?:[_ -]?input)?(?:[_ -]?tokens?)?|cached[_ -]?(?:input|prompt|context|tokens?)|cached)\\b"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'i');
+
     const mCA = src.match(cachedAfter);
     const mCB = src.match(cachedBefore);
     if (mCA) cached = parseTokenAmount(mCA[1]);
     else if (mCB) cached = parseTokenAmount(mCB[1]);
 
-    const freshBefore = new RegExp(`${NUM}\\s*(?:fresh|uncached|non-cached|new)(?:\\s+input|\\s+prompt|\\s+tokens?)?`, 'i');
-    const freshAfter = new RegExp(`(?:"?(?:fresh|uncached|non-cached|new)[_\\s-]?(?:input|prompt|tokens?)?"?)\\s*[:=]\\s*${NUM}`, 'i');
+    // 2. Explicit fresh / uncached / non-cached / new input
+    const freshRole = `\\b(?:fresh|uncached|non-cached|new)(?:${HS}+(?:input|prompt|context|tokens?))?\\b`;
+    const freshBefore = new RegExp(`${NUM}${BRIDGE_AFTER_NUM}${freshRole}`, 'i');
+    const freshAfter = new RegExp(`(?:"?\\b(?:fresh|uncached|non-cached|new)(?:[_ -]?(?:input|prompt|tokens?))?\\b"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'i');
+
     const mFA = src.match(freshAfter);
     const mFB = src.match(freshBefore);
     if (mFA) fresh = parseTokenAmount(mFA[1]);
     else if (mFB) fresh = parseTokenAmount(mFB[1]);
 
+    // 3. Generic input / prompt (strip matched cached spans first so cached input isn't re-matched as fresh)
     if (fresh === null) {
       const stripped = src
-        .replace(new RegExp(`${NUM}\\s*(?:cached(?:\\s+input|\\s+context|\\s+prompt|\\s+read|\\s+tokens?)?|cache[_\\s-]?read(?:[_\\s-]?input)?(?:[_\\s-]?tokens?)?)`, 'gi'), ' ')
-        .replace(new RegExp(`(?:"?(?:cache[_\\s-]?read(?:[_\\s-]?input)?(?:[_\\s-]?tokens?)?|cached[_\\s-]?(?:input|prompt|context|tokens?))"?)\\s*[:=]\\s*${NUM}`, 'gi'), ' ');
-      const inAfter = new RegExp(`(?:"?(?:input[_\\s-]?tokens?|prompt[_\\s-]?tokens?|input|prompt|in)"?)\\s*[:=]\\s*${NUM}`, 'i');
-      const inBefore = new RegExp(`${NUM}\\s*(?:input[_\\s-]?tokens?|prompt[_\\s-]?tokens?|input\\b|prompt\\b|in\\b)`, 'i');
+        .replace(new RegExp(`${NUM}${BRIDGE_AFTER_NUM}${cachedRole}`, 'gi'), ' ')
+        .replace(new RegExp(`(?:"?\\b(?:cache[_ -]?read(?:[_ -]?input)?(?:[_ -]?tokens?)?|cached[_ -]?(?:input|prompt|context|tokens?))\\b"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'gi'), ' ');
+
+      const inAfter = new RegExp(`(?:"?\\b(?:input[_ -]?tokens?|prompt[_ -]?tokens?|input|prompt|in)\\b"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'i');
+      const inBefore = new RegExp(`${NUM}${BRIDGE_AFTER_NUM}\\b(?:input[_ -]?tokens?|prompt[_ -]?tokens?|input|prompt|in)\\b`, 'i');
       const mIA = stripped.match(inAfter);
       const mIB = stripped.match(inBefore);
       if (mIA) fresh = parseTokenAmount(mIA[1]);
       else if (mIB) fresh = parseTokenAmount(mIB[1]);
     }
 
-    const outAfter = new RegExp(`(?:"?(?:output[_\\s-]?tokens?|completion[_\\s-]?tokens?|output|completion|out)"?)\\s*[:=]\\s*${NUM}`, 'i');
-    const outBefore = new RegExp(`${NUM}\\s*(?:output[_\\s-]?tokens?|completion[_\\s-]?tokens?|output\\b|completion\\b|out\\b)`, 'i');
+    // 4. Output / completion (including "were generated output")
+    const outRole = `\\b(?:(?:generated|produced|written)${HS}+)?(?:output[_ -]?tokens?|completion[_ -]?tokens?|output|completion|out)\\b`;
+    const outAfter = new RegExp(`(?:"?\\b(?:(?:generated|produced)[_ -]+)?(?:output[_ -]?tokens?|completion[_ -]?tokens?|output|completion|out)\\b"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'i');
+    const outBefore = new RegExp(`${NUM}${BRIDGE_AFTER_NUM}${outRole}`, 'i');
+
     const mOA = src.match(outAfter);
     const mOB = src.match(outBefore);
     if (mOA) output = parseTokenAmount(mOA[1]);
     else if (mOB) output = parseTokenAmount(mOB[1]);
 
-    if (!/(?:including|incl\.?|with)\s+reasoning/i.test(src)) {
-      const rAfter = new RegExp(`(?:"?(?:reasoning[_\\s-]?tokens?|thinking[_\\s-]?tokens?|reasoning)"?)\\s*[:=]\\s*${NUM}`, 'i');
-      const rBefore = new RegExp(`${NUM}\\s*(?:reasoning[_\\s-]?tokens?|thinking[_\\s-]?tokens?|reasoning\\b)`, 'i');
-      const mRA = src.match(rAfter);
-      const mRB = src.match(rBefore);
-      if (mRA) reasoningExtra = parseTokenAmount(mRA[1]);
-      else if (mRB) reasoningExtra = parseTokenAmount(mRB[1]);
+    // 5. Separate reasoning tokens (only if NOT phrased as "including reasoning" / "with reasoning")
+    if (!/\b(?:including|incl\.?|with)\s+reasoning\b/i.test(src)) {
+      const rAfter = new RegExp(`(?:"?\\b(?:reasoning[_ -]?tokens?|thinking[_ -]?tokens?|reasoning)\\b"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'i');
+      const rBefore = new RegExp(`${NUM}${BRIDGE_AFTER_NUM}\\b(?:reasoning[_ -]?tokens?|thinking[_ -]?tokens?|reasoning)\\b`, 'i');
+      const mrA = src.match(rAfter);
+      const mrB = src.match(rBefore);
+      if (mrA) reasoningExtra = parseTokenAmount(mrA[1]);
+      else if (mrB) reasoningExtra = parseTokenAmount(mrB[1]);
     }
     if (reasoningExtra) output = (output || 0) + reasoningExtra;
 
+    // 6. Fallback: "total 15.24M tokens ... 95% cached" when explicit cached/fresh weren't found
     if (cached === null && fresh === null) {
       const totMatch =
-        src.match(new RegExp(`total\\s*[:=\\t ]+${NUM}`, 'i')) ||
-        src.match(new RegExp(`${NUM}\\s*(?:total\\s+)?tokens?`, 'i'));
-      const pctMatch = src.match(/(\d+(?:\.\d+)?)\s*%\s*(?:was\s+)?cached/i);
+        src.match(new RegExp(`\\btotal${HS}*[:=\\t ]+${NUM}`, 'i')) ||
+        src.match(new RegExp(`${NUM}${HS}*(?:total${HS}+)?tokens?\\b`, 'i'));
+      const pctMatch = src.match(/(\d+(?:\.\d+)?)\s*%\s*(?:was|were)?\s*cached\b/i);
       const totalVal = totMatch ? parseTokenAmount(totMatch[1]) : null;
       if (totalVal !== null) {
         if (pctMatch) {
@@ -202,6 +229,7 @@
       }
     }
 
+    // 7. Single bare number fallback
     if (cached === null && fresh === null && output === null) {
       const bare = parseTokenAmount(src);
       if (bare !== null) fresh = bare;
