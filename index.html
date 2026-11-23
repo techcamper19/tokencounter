@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Token Spend</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="shell">
+    <!-- Top Header on Pitch Black -->
+    <header class="topbar">
+      <h1 class="wordmark">TOKEN SPEND</h1>
+      <div class="topbar-pills">
+        <button id="refreshBtn" class="pill-dark" type="button" title="Refresh live OpenRouter pricing">
+          <span id="syncLabel">Live OpenRouter</span>
+        </button>
+        <button id="openAllBtn" class="pill-dark" type="button">
+          All <span id="topCatalogCount">472</span> Models
+        </button>
+        <button id="clearOrSampleBtn" class="pill-dark" type="button">Clear</button>
+      </div>
+    </header>
+
+    <!-- Asymmetric Split Bento -->
+    <main class="bento">
+      <!-- LEFT COLUMN -->
+      <section class="col-left" aria-label="Usage input and graphics">
+        <!-- Pale-Mint Hero Paste Card -->
+        <article class="tile tile-mint">
+          <div class="tile-head">
+            <span class="pill-ink">Paste Report</span>
+            <div class="cache-toggle-wrap">
+              <span class="toggle-caption" id="cacheToggleLabel">CACHE</span>
+              <button
+                id="cacheToggleBtn"
+                class="phys-toggle is-on"
+                type="button"
+                role="switch"
+                aria-checked="true"
+                aria-labelledby="cacheToggleLabel"
+                title="Toggle prompt cache pricing on or off"
+              >
+                <span class="toggle-opt opt-off">OFF</span>
+                <span class="toggle-opt opt-on">ON</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="paste-frame">
+            <textarea
+              id="usageInput"
+              rows="5"
+              spellcheck="false"
+              aria-label="Paste token usage report"
+              placeholder="Paste any token summary, JSON usage block, or shorthand:&#10;14.50M cached input&#10;674,508 fresh input&#10;65,648 output, including reasoning"
+            ></textarea>
+          </div>
+
+          <!-- Thick-Black Proportional Bars + Inline Editable Figures -->
+          <div class="token-bars" role="group" aria-label="Detected token breakdown">
+            <div class="tbar-row">
+              <label for="cachedField" class="tbar-label">Cached</label>
+              <svg class="tbar-svg" viewBox="0 0 200 12" preserveAspectRatio="none" aria-hidden="true">
+                <line class="tbar-svg-track" x1="0" y1="6" x2="200" y2="6" />
+                <line id="barCached" class="tbar-svg-fill" x1="5" y1="6" x2="190" y2="6" />
+              </svg>
+              <div class="tbar-val-wrap">
+                <input id="cachedField" class="tbar-input" type="text" inputmode="decimal" autocomplete="off" aria-label="Cached input tokens" />
+                <span id="pctCached" class="tbar-pct">(95%)</span>
+              </div>
+            </div>
+
+            <div class="tbar-row">
+              <label for="freshField" class="tbar-label">Fresh</label>
+              <svg class="tbar-svg" viewBox="0 0 200 12" preserveAspectRatio="none" aria-hidden="true">
+                <line class="tbar-svg-track" x1="0" y1="6" x2="200" y2="6" />
+                <line id="barFresh" class="tbar-svg-fill" x1="5" y1="6" x2="14" y2="6" />
+              </svg>
+              <div class="tbar-val-wrap">
+                <input id="freshField" class="tbar-input" type="text" inputmode="decimal" autocomplete="off" aria-label="Fresh input tokens" />
+                <span id="pctFresh" class="tbar-pct">(4%)</span>
+              </div>
+            </div>
+
+            <div class="tbar-row">
+              <label for="outputField" class="tbar-label">Output</label>
+              <svg class="tbar-svg" viewBox="0 0 200 12" preserveAspectRatio="none" aria-hidden="true">
+                <line class="tbar-svg-track" x1="0" y1="6" x2="200" y2="6" />
+                <line id="barOutput" class="tbar-svg-fill" x1="5" y1="6" x2="6" y2="6" />
+              </svg>
+              <div class="tbar-val-wrap">
+                <input id="outputField" class="tbar-input" type="text" inputmode="decimal" autocomplete="off" aria-label="Output and reasoning tokens" />
+                <span id="pctOutput" class="tbar-pct">(1%)</span>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Bottom Left Two-Card Graphic Row -->
+        <div class="sub-grid">
+          <!-- Lavender Cache Savings Card -->
+          <article class="tile tile-lavender">
+            <div class="tile-head">
+              <span class="pill-ink">Cache Savings</span>
+            </div>
+
+            <div class="savings-big" id="savingsBig">-89%</div>
+
+            <div class="split-block-wrap">
+              <div class="split-block" aria-hidden="true">
+                <div id="splitPaidFill" class="split-paid-fill"></div>
+                <span id="splitPaidLabel" class="split-val-left">$3.46</span>
+                <span id="splitUncachedLabel" class="split-val-right">$30.99</span>
+              </div>
+              <div class="split-captions">
+                <span id="splitLeftCap">paid</span>
+                <span id="splitRightCap">uncached</span>
+              </div>
+            </div>
+
+            <div class="stepper-pill">
+              <button id="prevModelBtn" class="step-arrow" type="button" aria-label="Previous flagship model">&#8592;</button>
+              <span id="stepperModelName" class="step-name">Sonnet 5.5</span>
+              <button id="nextModelBtn" class="step-arrow" type="button" aria-label="Next flagship model">&#8594;</button>
+            </div>
+          </article>
+
+          <!-- Acid Olive Cost Curve Card -->
+          <article class="tile tile-olive">
+            <div class="tile-head">
+              <span class="pill-ink">Cost Curve</span>
+              <span id="curveMaxLabel" class="curve-bound">$13.82</span>
+            </div>
+
+            <div id="costCurveChart" class="curve-stage" aria-label="Flagship model cost curve"></div>
+
+            <div class="curve-footer">
+              <span id="curveMinLabel" class="curve-bound">$0.06</span>
+              <span id="curveCountLabel" class="curve-hint">Click any pin</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- RIGHT COLUMN -->
+      <section class="col-right" aria-label="Selected model and flagship list">
+        <!-- Vermilion Selected Model Hero Banner -->
+        <article class="tile tile-vermilion">
+          <div class="tile-head">
+            <span class="pill-ink">Selected Model</span>
+            <span id="selectedModelPill" class="pill-ink">Claude Sonnet 5.5</span>
+          </div>
+
+          <div class="hero-spend-grid">
+            <div class="hero-figure-wrap">
+              <div id="heroCost" class="hero-cost">$3.46</div>
+            </div>
+
+            <div class="hero-breakdown">
+              <div class="hb-row">
+                <span class="hb-label">Cached</span>
+                <span id="hbCached" class="hb-val">$1.45</span>
+              </div>
+              <div class="hb-row">
+                <span class="hb-label">Fresh</span>
+                <span id="hbFresh" class="hb-val">$1.35</span>
+              </div>
+              <div class="hb-row">
+                <span class="hb-label">Output</span>
+                <span id="hbOutput" class="hb-val">$0.66</span>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Pure-Black Iconic Flagship Models List -->
+        <div class="flagship-panel">
+          <div class="flagship-head">
+            <span class="pill-dark-static">Flagship Models</span>
+            <button id="digBtn" class="dig-trigger" type="button">
+              <span>Dig all <span id="digCatalogCount">472</span></span>
+              <span class="plus-circle" aria-hidden="true">+</span>
+            </button>
+          </div>
+
+          <div id="flagshipList" class="flagship-list" aria-live="polite">
+            <div class="loading-black">Syncing OpenRouter prices…</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Quiet Minimal Footer on Pitch Black -->
+    <footer class="bottom-foot">
+      <span id="totalFootTag">15.24M total tokens</span>
+      <div class="foot-links">
+        <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer">OpenRouter</a>
+        <a href="archive/v2/index.html">v2</a>
+        <a href="archive/v1/index.html">v1</a>
+      </div>
+    </footer>
+  </div>
+
+  <!-- On-Demand Explorer Drawer for All OpenRouter Models -->
+  <div id="drawerBackdrop" class="drawer-backdrop hidden" aria-hidden="true"></div>
+  <aside id="explorerDrawer" class="drawer hidden" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+    <div class="drawer-head">
+      <div>
+        <h2 id="drawerTitle">All OpenRouter Models</h2>
+        <p class="drawer-sub">Live cost for your pasted tokens. Pin any model to the main list.</p>
+      </div>
+      <button id="closeDrawerBtn" class="pill-dark" type="button">Close</button>
+    </div>
+
+    <div class="drawer-search-wrap">
+      <input
+        id="drawerSearch"
+        type="text"
+        placeholder="Search by model or provider (grok, qwen, llama, mistral)…"
+        autocomplete="off"
+        spellcheck="false"
+      />
+    </div>
+
+    <div id="drawerList" class="drawer-list"></div>
+  </aside>
+
+  <script src="app.js" defer></script>
+</body>
+</html>

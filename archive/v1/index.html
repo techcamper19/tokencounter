@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Token Spend Calculator — OpenRouter Pricing</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">₮</div>
+        <div>
+          <h1>Token Spend Calculator</h1>
+          <p class="subtitle">Live model pricing from OpenRouter</p>
+        </div>
+      </div>
+      <div class="sync-bar">
+        <span id="syncStatus" class="status-pill">Loading models…</span>
+        <button id="refreshBtn" class="btn btn-ghost" title="Fetch latest prices from OpenRouter">
+          <span class="icon-refresh">↻</span> Refresh
+        </button>
+      </div>
+    </header>
+
+    <main class="grid">
+      <!-- Left Column: Model Selector + Token Inputs -->
+      <section class="panel calculator-panel">
+        <div class="section-head">
+          <h2>1. Select Model</h2>
+          <span id="modelCountBadge" class="muted-tag"></span>
+        </div>
+
+        <div class="model-picker">
+          <div class="search-wrap">
+            <input
+              id="modelSearch"
+              type="text"
+              placeholder="Search models (e.g. claude, gpt, gemini, deepseek, llama)…  [ / ]"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button id="clearSearchBtn" class="clear-btn hidden" title="Clear search" aria-label="Clear search">×</button>
+          </div>
+
+          <div class="provider-chips" id="providerChips">
+            <button class="chip active" data-provider="all">All</button>
+            <button class="chip" data-provider="openai">OpenAI</button>
+            <button class="chip" data-provider="anthropic">Anthropic</button>
+            <button class="chip" data-provider="google">Google</button>
+            <button class="chip" data-provider="deepseek">DeepSeek</button>
+            <button class="chip" data-provider="meta-llama">Meta</button>
+            <button class="chip" data-provider="qwen">Qwen</button>
+            <button class="chip" data-provider="x-ai">xAI</button>
+            <button class="chip" data-provider="free">Free</button>
+          </div>
+
+          <div id="modelList" class="model-list" role="listbox" aria-label="Models"></div>
+        </div>
+
+        <div id="selectedModelCard" class="selected-card hidden">
+          <div class="selected-card-top">
+            <div>
+              <div class="selected-name" id="selectedName">—</div>
+              <div class="selected-id" id="selectedId">—</div>
+            </div>
+            <button id="pinCompareBtn" class="btn btn-small btn-ghost" title="Pin/unpin in comparison table">
+              ☆ Compare
+            </button>
+          </div>
+          <div class="rate-pills" id="selectedRates"></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="section-head">
+          <h2>2. Enter Token Usage</h2>
+          <div class="mode-tabs" role="tablist">
+            <button class="tab-btn active" data-mode="tokens" role="tab" aria-selected="true">Tokens</button>
+            <button class="tab-btn" data-mode="text" role="tab" aria-selected="false">Paste Text</button>
+          </div>
+        </div>
+
+        <!-- Direct Token Inputs -->
+        <div id="tokenModePanel">
+          <div class="input-row">
+            <div class="field">
+              <div class="field-label">
+                <label for="inputTokens">Input tokens</label>
+                <div class="quick-btns" data-target="inputTokens">
+                  <button type="button" data-val="1000">1K</button>
+                  <button type="button" data-val="10000">10K</button>
+                  <button type="button" data-val="100000">100K</button>
+                  <button type="button" data-val="1000000">1M</button>
+                </div>
+              </div>
+              <input id="inputTokens" type="number" min="0" step="any" value="10000" placeholder="0" />
+            </div>
+
+            <div class="field">
+              <div class="field-label">
+                <label for="outputTokens">Output tokens</label>
+                <div class="quick-btns" data-target="outputTokens">
+                  <button type="button" data-val="500">500</button>
+                  <button type="button" data-val="2000">2K</button>
+                  <button type="button" data-val="10000">10K</button>
+                  <button type="button" data-val="100000">100K</button>
+                </div>
+              </div>
+              <input id="outputTokens" type="number" min="0" step="any" value="2000" placeholder="0" />
+            </div>
+          </div>
+
+          <div class="input-row compact-row">
+            <div class="field">
+              <label for="multiplier">Requests / Multiplier</label>
+              <div class="multiplier-wrap">
+                <input id="multiplier" type="number" min="1" step="1" value="1" />
+                <div class="quick-btns" data-target="multiplier">
+                  <button type="button" data-val="1">×1</button>
+                  <button type="button" data-val="10">×10</button>
+                  <button type="button" data-val="100">×100</button>
+                  <button type="button" data-val="1000">×1K</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <details class="advanced-box">
+            <summary>Advanced: Cached input &amp; reasoning tokens</summary>
+            <div class="input-row advanced-grid">
+              <div class="field">
+                <label for="cacheReadTokens">Cache read tokens</label>
+                <input id="cacheReadTokens" type="number" min="0" step="any" value="0" placeholder="0" />
+              </div>
+              <div class="field">
+                <label for="cacheWriteTokens">Cache write tokens</label>
+                <input id="cacheWriteTokens" type="number" min="0" step="any" value="0" placeholder="0" />
+              </div>
+              <div class="field">
+                <label for="reasoningTokens">Reasoning tokens</label>
+                <input id="reasoningTokens" type="number" min="0" step="any" value="0" placeholder="0" />
+              </div>
+            </div>
+            <p class="hint">
+              If a model has no separate cache or reasoning rate on OpenRouter, standard prompt/completion rates are used as fallback (or $0 if unused).
+            </p>
+          </details>
+        </div>
+
+        <!-- Text Paste Estimator -->
+        <div id="textModePanel" class="hidden">
+          <div class="field">
+            <div class="field-label">
+              <label for="promptText">Paste input / prompt text</label>
+              <span id="promptEstLabel" class="est-badge">0 chars ≈ 0 tokens</span>
+            </div>
+            <textarea id="promptText" rows="4" placeholder="Paste your prompt, context, or file contents here…"></textarea>
+          </div>
+          <div class="field">
+            <div class="field-label">
+              <label for="outputText">Paste output / completion text (optional)</label>
+              <span id="outputEstLabel" class="est-badge">0 chars ≈ 0 tokens</span>
+            </div>
+            <textarea id="outputText" rows="3" placeholder="Paste model response here…"></textarea>
+          </div>
+          <p class="hint">
+            Uses a fast client-side token estimate (~4 chars/token for English, adjusted for CJK &amp; code). Editing here updates the token counts automatically.
+          </p>
+        </div>
+      </section>
+
+      <!-- Right Column: Cost Output + Spend Log -->
+      <section class="right-col">
+        <div class="panel result-panel">
+          <div class="section-head">
+            <h2>Estimated Spend</h2>
+            <span id="tierBadge" class="tier-badge hidden">Long-context tier active</span>
+          </div>
+
+          <div class="total-hero">
+            <div class="total-amount" id="totalCost">$0.00</div>
+            <div class="total-sub" id="perRequestSub"></div>
+          </div>
+
+          <div class="breakdown-bar" id="breakdownBar" aria-hidden="true"></div>
+
+          <div class="breakdown-list" id="breakdownList"></div>
+
+          <div class="log-action-row">
+            <input id="entryNote" type="text" placeholder="Optional label (e.g. PR review)…" />
+            <button id="addLogBtn" class="btn btn-primary">+ Add to Spend Log</button>
+          </div>
+        </div>
+
+        <div class="panel log-panel">
+          <div class="section-head">
+            <div>
+              <h2>Spend Log</h2>
+              <p class="muted-small" id="logSummary">0 entries · 0 total tokens</p>
+            </div>
+            <div class="log-total-wrap">
+              <span class="log-total-label">Running Total</span>
+              <span class="log-total" id="logRunningTotal">$0.00</span>
+            </div>
+          </div>
+
+          <div id="logList" class="log-list">
+            <div class="empty-state">No logged runs yet. Click <strong>+ Add to Spend Log</strong> to track cumulative spend.</div>
+          </div>
+
+          <div class="log-footer">
+            <button id="exportCsvBtn" class="btn btn-small btn-ghost" disabled>Export CSV</button>
+            <button id="clearLogBtn" class="btn btn-small btn-danger-ghost" disabled>Clear Log</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom Panel: Quick Comparison Table -->
+    <section class="panel compare-panel">
+      <div class="section-head">
+        <div>
+          <h2>Compare Same Usage Across Models</h2>
+          <p class="muted-small" id="compareSubtitle">Based on your current token inputs</p>
+        </div>
+        <button id="resetCompareBtn" class="btn btn-small btn-ghost">Reset defaults</button>
+      </div>
+      <div class="table-wrap">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th class="num">Input / 1M</th>
+              <th class="num">Output / 1M</th>
+              <th class="num">Context</th>
+              <th class="num">Estimated Cost</th>
+              <th class="num">vs Selected</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="compareBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
