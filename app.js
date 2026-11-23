@@ -666,8 +666,8 @@
     const mode = theme === 'light' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', mode);
     if (el.themeToggleBtn) {
-      el.themeToggleBtn.textContent = mode === 'dark' ? 'Light' : 'Dark';
-      el.themeToggleBtn.setAttribute('aria-pressed', String(mode === 'light'));
+      el.themeToggleBtn.classList.toggle('is-light', mode === 'light');
+      el.themeToggleBtn.setAttribute('aria-checked', String(mode === 'light'));
     }
     try {
       localStorage.setItem(STORAGE_KEYS.theme, mode);

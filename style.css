@@ -161,6 +161,56 @@ body {
   cursor: wait;
 }
 
+/* Distinct Tactile Moon/Sun Theme Switch */
+.theme-switch-pill {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  width: 68px;
+  height: 36px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-light);
+  background-color: var(--bg-drawer-hover);
+  cursor: pointer;
+}
+
+.theme-switch-pill::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: var(--ink-on-void);
+  transform: translateX(0);
+  transition: transform 0.16s ease;
+}
+
+.theme-switch-pill.is-light::before {
+  transform: translateX(32px);
+}
+
+.ts-opt {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  transition: color 0.14s ease;
+}
+
+.theme-switch-pill:not(.is-light) .ts-dark,
+.theme-switch-pill.is-light .ts-light {
+  color: var(--ink-on-void-inv);
+}
+
+.theme-switch-pill:not(.is-light) .ts-light,
+.theme-switch-pill.is-light .ts-dark {
+  color: var(--ink-dim);
+}
+
 .pill-ink {
   display: inline-flex;
   align-items: center;
@@ -236,6 +286,31 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.tile-head-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ink-action-link {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 2px 0;
+  color: var(--ink-dark-soft);
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 500;
+  border-bottom: 1px solid var(--border-ink-soft);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.ink-action-link:hover {
+  color: var(--ink-dark);
+  border-bottom-color: var(--ink-dark);
 }
 
 /* Physical Cache Toggle (OFF / ON) */
@@ -1031,6 +1106,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .phys-toggle::before,
+  .theme-switch-pill::before,
   .tbar-fill,
   .split-paid-fill,
   .pin-dot,

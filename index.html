@@ -10,7 +10,7 @@
     href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@300;400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=3.4" />
+  <link rel="stylesheet" href="style.css?v=3.5" />
 </head>
 <body>
   <div class="shell">
@@ -24,8 +24,27 @@
         <button id="openAllBtn" class="pill-dark" type="button">
           All <span id="topCatalogCount">468</span> Models
         </button>
-        <button id="clearOrSampleBtn" class="pill-dark" type="button">Example</button>
-        <button id="themeToggleBtn" class="pill-dark" type="button" aria-label="Switch color theme" title="Toggle light or dark mode">Light</button>
+        <button
+          id="themeToggleBtn"
+          class="theme-switch-pill"
+          type="button"
+          role="switch"
+          aria-checked="false"
+          aria-label="Toggle light or dark mode"
+          title="Switch between Dark and Light mode"
+        >
+          <span class="ts-opt ts-dark" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          </span>
+          <span class="ts-opt ts-light" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+            </svg>
+          </span>
+        </button>
       </div>
     </header>
 
@@ -36,7 +55,10 @@
         <!-- Pale-Mint Hero Paste Card -->
         <article class="tile tile-mint">
           <div class="tile-head">
-            <span class="pill-ink">Paste Report</span>
+            <div class="tile-head-left">
+              <span class="pill-ink">Paste Report</span>
+              <button id="clearOrSampleBtn" class="ink-action-link" type="button">Example</button>
+            </div>
             <div class="cache-toggle-wrap">
               <span class="toggle-caption" id="cacheToggleLabel">CACHE</span>
               <button
@@ -231,6 +253,6 @@
     <div id="drawerList" class="drawer-list"></div>
   </aside>
 
-  <script src="app.js?v=3.4" defer></script>
+  <script src="app.js?v=3.5" defer></script>
 </body>
 </html>
