@@ -10,7 +10,7 @@
     href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@300;400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=3.5" />
+  <link rel="stylesheet" href="style.css?v=3.6" />
 </head>
 <body>
   <div class="shell">
@@ -82,9 +82,12 @@
               rows="5"
               spellcheck="false"
               aria-label="Paste token usage report"
-              placeholder="Paste any token summary, JSON usage block, or shorthand:&#10;10M cached input&#10;500,000 fresh input&#10;50,000 output"
+              placeholder="Paste any token summary, table, JSON usage block, or shorthand:&#10;10M cached input&#10;500,000 fresh input&#10;50,000 output"
             ></textarea>
           </div>
+
+          <!-- Transparent Parse Status / Unsplit Warning -->
+          <div id="parseStatus" class="parse-status hidden" aria-live="polite"></div>
 
           <!-- Thick-Black Proportional Bars + Inline Editable Figures -->
           <div class="token-bars" role="group" aria-label="Detected token breakdown">
@@ -184,19 +187,20 @@
           <div class="hero-spend-grid">
             <div class="hero-figure-wrap">
               <div id="heroCost" class="hero-cost">$0.00</div>
+              <div id="heroRangeNote" class="hero-range hidden"></div>
             </div>
 
             <div class="hero-breakdown">
               <div class="hb-row">
-                <span class="hb-label">Cached</span>
+                <span class="hb-label">Cached <span id="rateCached" class="hb-rate"></span></span>
                 <span id="hbCached" class="hb-val">$0.00</span>
               </div>
               <div class="hb-row">
-                <span class="hb-label">Fresh</span>
+                <span class="hb-label">Fresh <span id="rateFresh" class="hb-rate"></span></span>
                 <span id="hbFresh" class="hb-val">$0.00</span>
               </div>
               <div class="hb-row">
-                <span class="hb-label">Output</span>
+                <span class="hb-label">Output <span id="rateOutput" class="hb-rate"></span></span>
                 <span id="hbOutput" class="hb-val">$0.00</span>
               </div>
             </div>
@@ -253,6 +257,6 @@
     <div id="drawerList" class="drawer-list"></div>
   </aside>
 
-  <script src="app.js?v=3.5" defer></script>
+  <script src="app.js?v=3.6" defer></script>
 </body>
 </html>

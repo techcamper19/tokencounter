@@ -33,6 +33,12 @@
   let selectedModelId = null;
   let cacheEnabled = true;
   let tokens = { cached: 0, fresh: 0, output: 0 };
+  let parseMeta = {
+    mode: 'empty', // 'empty' | 'exact' | 'combined' | 'estimated' | 'none' | 'manual'
+    combinedInOut: 0,
+    splitOutPct: 0, // 0 = all-in baseline (shows min–max range), >0 = user-chosen % split
+    note: '',
+  };
 
   const $ = (id) => document.getElementById(id);
   const el = {
@@ -44,6 +50,7 @@
     themeToggleBtn: $('themeToggleBtn'),
     cacheToggleBtn: $('cacheToggleBtn'),
     usageInput: $('usageInput'),
+    parseStatus: $('parseStatus'),
     cachedField: $('cachedField'),
     freshField: $('freshField'),
     outputField: $('outputField'),
@@ -67,6 +74,10 @@
     costCurveChart: $('costCurveChart'),
     selectedModelPill: $('selectedModelPill'),
     heroCost: $('heroCost'),
+    heroRangeNote: $('heroRangeNote'),
+    rateCached: $('rateCached'),
+    rateFresh: $('rateFresh'),
+    rateOutput: $('rateOutput'),
     hbCached: $('hbCached'),
     hbFresh: $('hbFresh'),
     hbOutput: $('hbOutput'),
@@ -116,6 +127,18 @@
     return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
+  function formatUnitRate(perToken) {
+    if (!Number.isFinite(perToken) || perToken < 0) return '';
+    const perM = perToken * 1_000_000;
+    if (perM === 0) return '$0/M';
+    if (perM < 0.01) return `$${perM.toFixed(4).replace(/0+$/, '').replace(/\.$/, '')}/M`;
+    if (perM < 1) {
+      const s = perM.toFixed(3);
+      return `$${s.endsWith('0') ? s.slice(0, -1) : s}/M`;
+    }
+    return `$${perM.toFixed(2)}/M`;
+  }
+
   function parseTokenAmount(raw) {
     if (!raw) return null;
     const clean = String(raw).trim().replace(/,/g, '');
@@ -131,10 +154,160 @@
     return Math.round(base * mult);
   }
 
-  // Smart parser for real-world usage reports, prose summaries, JSON usage blocks, or shorthand
+  // Extract structured usage objects from pasted JSON / JSONL logs (OpenAI, OpenRouter, Anthropic, Gemini)
+  function extractJsonUsage(src) {
+    if (!src.includes('{') || !src.includes('}')) return null;
+
+    const objects = [];
+    let depth = 0;
+    let start = -1;
+    let inStr = false;
+    let escaped = false;
+
+    for (let i = 0; i < src.length; i++) {
+      const ch = src[i];
+      if (inStr) {
+        if (escaped) escaped = false;
+        else if (ch === '\\') escaped = true;
+        else if (ch === '"') inStr = false;
+        continue;
+      }
+      if (ch === '"') {
+        inStr = true;
+      } else if (ch === '{') {
+        if (depth === 0) start = i;
+        depth++;
+      } else if (ch === '}') {
+        depth--;
+        if (depth === 0 && start !== -1) {
+          const candidate = src.slice(start, i + 1);
+          try {
+            objects.push(JSON.parse(candidate));
+          } catch {
+            // Ignore non-JSON brace blocks
+          }
+          start = -1;
+        }
+      }
+    }
+
+    if (!objects.length) return null;
+
+    let cached = 0;
+    let fresh = 0;
+    let output = 0;
+    let foundAny = false;
+
+    function visit(obj) {
+      if (!obj || typeof obj !== 'object') return;
+      if (Array.isArray(obj)) {
+        obj.forEach(visit);
+        return;
+      }
+
+      // If this object wraps a `usage` or `usageMetadata` sub-object, walk into it directly
+      if (obj.usage && typeof obj.usage === 'object') {
+        visit(obj.usage);
+        return;
+      }
+      if (obj.usageMetadata && typeof obj.usageMetadata === 'object') {
+        visit(obj.usageMetadata);
+        return;
+      }
+
+      // OpenAI / OpenRouter schema: prompt_tokens INCLUDES cached_tokens
+      if (typeof obj.prompt_tokens === 'number' || typeof obj.completion_tokens === 'number') {
+        const pt = Number(obj.prompt_tokens) || 0;
+        const ct = Number(obj.completion_tokens) || 0;
+        const cd =
+          Number(obj.prompt_tokens_details?.cached_tokens) ||
+          Number(obj.cached_tokens) ||
+          Number(obj.cache_read_input_tokens) ||
+          0;
+        cached += cd;
+        fresh += Math.max(0, pt - cd);
+        output += ct;
+        foundAny = true;
+        return;
+      }
+
+      // Anthropic schema: input_tokens is already uncached fresh input
+      if (
+        typeof obj.input_tokens === 'number' ||
+        typeof obj.output_tokens === 'number' ||
+        typeof obj.cache_read_input_tokens === 'number'
+      ) {
+        const it = Number(obj.input_tokens) || 0;
+        const cr = Number(obj.cache_read_input_tokens) || Number(obj.cached_tokens) || 0;
+        const cw = Number(obj.cache_creation_input_tokens) || 0;
+        const ot = Number(obj.output_tokens) || 0;
+        const rt = Number(obj.reasoning_tokens) || 0;
+        cached += cr;
+        fresh += it + cw;
+        output += ot + rt;
+        foundAny = true;
+        return;
+      }
+
+      // Gemini schema: promptTokenCount INCLUDES cachedContentTokenCount
+      if (
+        typeof obj.promptTokenCount === 'number' ||
+        typeof obj.candidatesTokenCount === 'number'
+      ) {
+        const pt = Number(obj.promptTokenCount) || 0;
+        const cd = Number(obj.cachedContentTokenCount) || 0;
+        const ot = Number(obj.candidatesTokenCount) || 0;
+        const th = Number(obj.thoughtsTokenCount) || 0;
+        cached += cd;
+        fresh += Math.max(0, pt - cd);
+        output += ot + th;
+        foundAny = true;
+        return;
+      }
+
+      Object.values(obj).forEach((v) => {
+        if (v && typeof v === 'object') visit(v);
+      });
+    }
+
+    objects.forEach(visit);
+    if (!foundAny) return null;
+
+    return {
+      cached: Math.round(cached),
+      fresh: Math.round(fresh),
+      output: Math.round(output),
+      combinedInOut: 0,
+      mode: 'exact',
+      note: 'Parsed exact JSON usage payload',
+    };
+  }
+
+  // Zero-guessing parser for prose summaries, tables, multi-session logs, JSON, and shorthand
   function parseUsageText(text) {
-    const src = String(text || '').trim();
-    if (!src) return { cached: 0, fresh: 0, output: 0 };
+    const raw = String(text || '').trim();
+    if (!raw) {
+      return { cached: 0, fresh: 0, output: 0, combinedInOut: 0, mode: 'empty', note: '' };
+    }
+
+    // 1. Try exact JSON / JSONL extraction first
+    const jsonRes = extractJsonUsage(raw);
+    if (jsonRes) return jsonRes;
+
+    // Normalize markdown table pipes ("| Cached input | 14.5M |" -> "Cached input: 14.5M")
+    const src = raw
+      .split(/\r?\n/)
+      .map((line) => {
+        if (/^\s*\|?[\s:-]+\|[\s|:-]*$/.test(line)) return ''; // skip markdown table separator row
+        if (line.includes('|')) {
+          return line
+            .replace(/^\s*\|\s*/, '')
+            .replace(/\s*\|\s*$/, '')
+            .replace(/\s*\|\s*/g, ': ');
+        }
+        return line;
+      })
+      .join('\n');
 
     // Horizontal whitespace only — never bridge across newlines!
     const HS = '[ \\t]';
@@ -144,98 +317,192 @@
 
     // Short same-line conversational bridge between a number and its role, e.g. "(85%) were ", "tokens were generated "
     const BRIDGE_AFTER_NUM =
-      `(?:${HS}+(?:tokens?${HS}+)?(?:\\([^)\\n]{1,32}\\)${HS}*)?(?:(?:were|was|are|is|of|in|as|for|from|came${HS}+from|read${HS}+from|reused${HS}+as|billed${HS}+as|generated|produced|written|sent|total|new)${HS}+){0,4})`;
+      `(?:${HS}+(?:tokens?${HS}+)?(?:\\([^)\\n]{1,32}\\)${HS}*)?(?:(?:were|was|are|is|of|in|as|for|from|came${HS}+from|read${HS}+from|reused${HS}+as|billed${HS}+as|generated|produced|written|sent|total|new|combined)\\s+){0,4})`.replace(/\\s\+/g, `${HS}+`);
 
     // Same-line connector between a label and a number, e.g. ": ", " = ", " was about "
     const BRIDGE_AFTER_LABEL =
       `(?:${HS}*[:=]${HS}*|${HS}+(?:were|was|are|is|of|at)${HS}+(?:(?:about|around|roughly|approx\\.?|~)${HS}+)?)`;
 
-    let cached = null;
-    let fresh = null;
-    let output = null;
-    let reasoningExtra = null;
+    // Helper: collect ALL non-overlapping matches of a pair of (afterLabel, beforeLabel) regexes and strip them
+    function extractAll(inputText, afterRe, beforeRe) {
+      let working = inputText;
+      const values = [];
 
-    // 1. Cached input (number -> label OR label -> number)
+      const run = (re) => {
+        working = working.replace(re, (match, numStr) => {
+          const val = parseTokenAmount(numStr);
+          if (val !== null) values.push(val);
+          return ' ';
+        });
+      };
+
+      if (afterRe) run(afterRe);
+      if (beforeRe) run(beforeRe);
+
+      return {
+        sum: values.length ? values.reduce((a, b) => a + b, 0) : null,
+        count: values.length,
+        rest: working,
+      };
+    }
+
+    let work = src;
+
+    // 2. Detect COMBINED "input and output" / "input/output" / "in+out" / "prompt and completion" FIRST
+    const combinedRole =
+      `\\b(?:(?:input|prompt|in)${HS}*(?:and|&|\\/|\\+)${HS}*(?:output|completion|out)(?:${HS}+tokens?)?|(?:combined|total)${HS}+(?:input|prompt)${HS}*(?:and|&|\\/|\\+)${HS}*(?:output|completion))\\b`;
+    const combinedAfter = new RegExp(`(?:"?${combinedRole}"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'gi');
+    const combinedBefore = new RegExp(`${NUM}${BRIDGE_AFTER_NUM}${combinedRole}`, 'gi');
+    const combinedHit = extractAll(work, combinedAfter, combinedBefore);
+    const combinedInOut = combinedHit.sum || 0;
+    work = combinedHit.rest;
+
+    // 3. Cached input (explicit)
     const cachedRole =
       `\\b(?:cached(?:${HS}+(?:input|context|prompt|read|tokens?))?|cache[_ -]?read(?:[_ -]?input)?(?:[_ -]?tokens?)?|read${HS}+from${HS}+cache|from${HS}+cache)\\b`;
-    const cachedBefore = new RegExp(`${NUM}${BRIDGE_AFTER_NUM}${cachedRole}`, 'i');
-    const cachedAfter = new RegExp(`(?:"?\\b(?:cache[_ -]?read(?:[_ -]?input)?(?:[_ -]?tokens?)?|cached[_ -]?(?:input|prompt|context|tokens?)|cached)\\b"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'i');
+    const cachedAfter = new RegExp(`(?:"?\\b(?:cache[_ -]?read(?:[_ -]?input)?(?:[_ -]?tokens?)?|cached[_ -]?(?:input|prompt|context|tokens?)|cached)\\b"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'gi');
+    const cachedBefore = new RegExp(`${NUM}${BRIDGE_AFTER_NUM}${cachedRole}`, 'gi');
+    const cachedHit = extractAll(work, cachedAfter, cachedBefore);
+    let cached = cachedHit.sum;
+    work = cachedHit.rest;
 
-    const mCA = src.match(cachedAfter);
-    const mCB = src.match(cachedBefore);
-    if (mCA) cached = parseTokenAmount(mCA[1]);
-    else if (mCB) cached = parseTokenAmount(mCB[1]);
+    // 4. Cache write / creation (if explicitly listed, added to fresh input)
+    const cwRole = `\\b(?:cache[_ -]?(?:write|creation)(?:[_ -]?(?:input|tokens?))?)\\b`;
+    const cwAfter = new RegExp(`(?:"?${cwRole}"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'gi');
+    const cwBefore = new RegExp(`${NUM}${BRIDGE_AFTER_NUM}${cwRole}`, 'gi');
+    const cwHit = extractAll(work, cwAfter, cwBefore);
+    const cacheWrite = cwHit.sum || 0;
+    work = cwHit.rest;
 
-    // 2. Explicit fresh / uncached / non-cached / new input
+    // 5. Explicit fresh / uncached / non-cached / new input
     const freshRole = `\\b(?:fresh|uncached|non-cached|new)(?:${HS}+(?:input|prompt|context|tokens?))?\\b`;
-    const freshBefore = new RegExp(`${NUM}${BRIDGE_AFTER_NUM}${freshRole}`, 'i');
-    const freshAfter = new RegExp(`(?:"?\\b(?:fresh|uncached|non-cached|new)(?:[_ -]?(?:input|prompt|tokens?))?\\b"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'i');
+    const freshAfter = new RegExp(`(?:"?\\b(?:fresh|uncached|non-cached|new)(?:[_ -]?(?:input|prompt|tokens?))?\\b"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'gi');
+    const freshBefore = new RegExp(`${NUM}${BRIDGE_AFTER_NUM}${freshRole}`, 'gi');
+    const freshHit = extractAll(work, freshAfter, freshBefore);
+    let fresh = freshHit.sum;
+    work = freshHit.rest;
 
-    const mFA = src.match(freshAfter);
-    const mFB = src.match(freshBefore);
-    if (mFA) fresh = parseTokenAmount(mFA[1]);
-    else if (mFB) fresh = parseTokenAmount(mFB[1]);
-
-    // 3. Generic input / prompt (strip matched cached spans first so cached input isn't re-matched as fresh)
+    // 6. Generic input / prompt (only on remaining text when explicit fresh wasn't found)
+    let inputPctSplitNote = '';
     if (fresh === null) {
-      const stripped = src
-        .replace(new RegExp(`${NUM}${BRIDGE_AFTER_NUM}${cachedRole}`, 'gi'), ' ')
-        .replace(new RegExp(`(?:"?\\b(?:cache[_ -]?read(?:[_ -]?input)?(?:[_ -]?tokens?)?|cached[_ -]?(?:input|prompt|context|tokens?))\\b"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'gi'), ' ');
-
-      const inAfter = new RegExp(`(?:"?\\b(?:input[_ -]?tokens?|prompt[_ -]?tokens?|input|prompt|in)\\b"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'i');
-      const inBefore = new RegExp(`${NUM}${BRIDGE_AFTER_NUM}\\b(?:input[_ -]?tokens?|prompt[_ -]?tokens?|input|prompt|in)\\b`, 'i');
-      const mIA = stripped.match(inAfter);
-      const mIB = stripped.match(inBefore);
-      if (mIA) fresh = parseTokenAmount(mIA[1]);
-      else if (mIB) fresh = parseTokenAmount(mIB[1]);
-    }
-
-    // 4. Output / completion (including "were generated output")
-    const outRole = `\\b(?:(?:generated|produced|written)${HS}+)?(?:output[_ -]?tokens?|completion[_ -]?tokens?|output|completion|out)\\b`;
-    const outAfter = new RegExp(`(?:"?\\b(?:(?:generated|produced)[_ -]+)?(?:output[_ -]?tokens?|completion[_ -]?tokens?|output|completion|out)\\b"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'i');
-    const outBefore = new RegExp(`${NUM}${BRIDGE_AFTER_NUM}${outRole}`, 'i');
-
-    const mOA = src.match(outAfter);
-    const mOB = src.match(outBefore);
-    if (mOA) output = parseTokenAmount(mOA[1]);
-    else if (mOB) output = parseTokenAmount(mOB[1]);
-
-    // 5. Separate reasoning tokens (only if NOT phrased as "including reasoning" / "with reasoning")
-    if (!/\b(?:including|incl\.?|with)\s+reasoning\b/i.test(src)) {
-      const rAfter = new RegExp(`(?:"?\\b(?:reasoning[_ -]?tokens?|thinking[_ -]?tokens?|reasoning)\\b"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'i');
-      const rBefore = new RegExp(`${NUM}${BRIDGE_AFTER_NUM}\\b(?:reasoning[_ -]?tokens?|thinking[_ -]?tokens?|reasoning)\\b`, 'i');
-      const mrA = src.match(rAfter);
-      const mrB = src.match(rBefore);
-      if (mrA) reasoningExtra = parseTokenAmount(mrA[1]);
-      else if (mrB) reasoningExtra = parseTokenAmount(mrB[1]);
-    }
-    if (reasoningExtra) output = (output || 0) + reasoningExtra;
-
-    // 6. Fallback: "total 15.24M tokens ... 95% cached" when explicit cached/fresh weren't found
-    if (cached === null && fresh === null) {
-      const totMatch =
-        src.match(new RegExp(`\\btotal${HS}*[:=\\t ]+${NUM}`, 'i')) ||
-        src.match(new RegExp(`${NUM}${HS}*(?:total${HS}+)?tokens?\\b`, 'i'));
-      const pctMatch = src.match(/(\d+(?:\.\d+)?)\s*%\s*(?:was|were)?\s*cached\b/i);
-      const totalVal = totMatch ? parseTokenAmount(totMatch[1]) : null;
-      if (totalVal !== null) {
-        if (pctMatch) {
-          const pct = Math.min(100, Math.max(0, parseFloat(pctMatch[1])));
-          cached = Math.round(totalVal * (pct / 100));
-          fresh = Math.max(0, totalVal - cached);
+      const inAfter = new RegExp(`(?:"?\\b(?:input[_ -]?tokens?|prompt[_ -]?tokens?|input|prompt|in)\\b"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'gi');
+      const inBefore = new RegExp(`${NUM}${BRIDGE_AFTER_NUM}\\b(?:input[_ -]?tokens?|prompt[_ -]?tokens?|input|prompt|in)\\b`, 'gi');
+      const inHit = extractAll(work, inAfter, inBefore);
+      if (inHit.sum !== null) {
+        // Check for "Input: 1.2M (90% cached)" when no explicit cached amount was found
+        const pctInCached = cached === null ? src.match(/(\d+(?:\.\d+)?)\s*%\s*(?:was|were)?\s*cached\b/i) : null;
+        if (pctInCached) {
+          const pct = Math.min(100, Math.max(0, parseFloat(pctInCached[1])));
+          cached = Math.round(inHit.sum * (pct / 100));
+          fresh = Math.max(0, inHit.sum - cached);
+          inputPctSplitNote = `Split input using ${pct}% cached`;
         } else {
-          fresh = totalVal;
+          fresh = inHit.sum;
         }
+        work = inHit.rest;
       }
     }
 
-    // 7. Single bare number fallback
-    if (cached === null && fresh === null && output === null) {
-      const bare = parseTokenAmount(src);
-      if (bare !== null) fresh = bare;
+    if (cacheWrite > 0) {
+      fresh = (fresh || 0) + cacheWrite;
     }
 
-    return { cached: cached || 0, fresh: fresh || 0, output: output || 0 };
+    // 7. Output / completion (only on remaining text — combined input+output already stripped!)
+    const outRole = `\\b(?:(?:generated|produced|written)${HS}+)?(?:output[_ -]?tokens?|completion[_ -]?tokens?|output|completion|out)\\b`;
+    const outAfter = new RegExp(`(?:"?\\b(?:(?:generated|produced)[_ -]+)?(?:output[_ -]?tokens?|completion[_ -]?tokens?|output|completion|out)\\b"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'gi');
+    const outBefore = new RegExp(`${NUM}${BRIDGE_AFTER_NUM}${outRole}`, 'gi');
+    const outHit = extractAll(work, outAfter, outBefore);
+    let output = outHit.sum;
+    work = outHit.rest;
+
+    // 8. Separate reasoning tokens (only if NOT phrased as "including reasoning" / "with reasoning")
+    if (!/\b(?:including|incl\.?|with)\s+reasoning\b/i.test(src)) {
+      const rAfter = new RegExp(`(?:"?\\b(?:reasoning[_ -]?tokens?|thinking[_ -]?tokens?|reasoning)\\b"?)${BRIDGE_AFTER_LABEL}${NUM}`, 'gi');
+      const rBefore = new RegExp(`${NUM}${BRIDGE_AFTER_NUM}\\b(?:reasoning[_ -]?tokens?|thinking[_ -]?tokens?|reasoning)\\b`, 'gi');
+      const rHit = extractAll(work, rAfter, rBefore);
+      if (rHit.sum) {
+        output = (output || 0) + rHit.sum;
+      }
+    }
+
+    // Case A: Combined input + output was explicitly present (e.g. "4.13M input and output tokens")
+    if (combinedInOut > 0 && fresh === null && output === null) {
+      return {
+        cached: cached || 0,
+        fresh: combinedInOut,
+        output: 0,
+        combinedInOut,
+        mode: 'combined',
+        note: `${formatCompact(combinedInOut)} is combined input + output (not split in text)`,
+      };
+    }
+
+    // Case B: Clean exact breakdown found
+    if (cached !== null || fresh !== null || output !== null) {
+      return {
+        cached: cached || 0,
+        fresh: fresh || 0,
+        output: output || 0,
+        combinedInOut: 0,
+        mode: inputPctSplitNote ? 'estimated' : 'exact',
+        note: inputPctSplitNote || 'Exact read',
+      };
+    }
+
+    // Case C: Fallback — "Total 15.24M tokens, 95% were cached" (explicit total + % cached)
+    const totMatch =
+      src.match(new RegExp(`\\btotal${HS}*[:=\\t ]+${NUM}`, 'i')) ||
+      src.match(new RegExp(`${NUM}${HS}*(?:total${HS}+)?tokens?\\b`, 'i'));
+    const pctMatch = src.match(/(\d+(?:\.\d+)?)\s*%\s*(?:was|were)?\s*cached\b/i);
+    const totalVal = totMatch ? parseTokenAmount(totMatch[1]) : null;
+
+    if (totalVal !== null) {
+      if (pctMatch) {
+        const pct = Math.min(100, Math.max(0, parseFloat(pctMatch[1])));
+        const estCached = Math.round(totalVal * (pct / 100));
+        const estRem = Math.max(0, totalVal - estCached);
+        return {
+          cached: estCached,
+          fresh: estRem,
+          output: 0,
+          combinedInOut: estRem,
+          mode: 'combined',
+          note: `${formatCompact(estRem)} uncached remaining (${pct}% cached, output not split)`,
+        };
+      }
+      // Total tokens with NO breakdown at all -> flag honestly as unsplit!
+      return {
+        cached: 0,
+        fresh: totalVal,
+        output: 0,
+        combinedInOut: totalVal,
+        mode: 'combined',
+        note: `${formatCompact(totalVal)} total tokens (input / output not split in text)`,
+      };
+    }
+
+    // Case D: Single bare number (e.g. "2.5M")
+    const bare = parseTokenAmount(src);
+    if (bare !== null) {
+      return {
+        cached: 0,
+        fresh: bare,
+        output: 0,
+        combinedInOut: bare,
+        mode: 'combined',
+        note: `${formatCompact(bare)} unlabeled tokens — split or adjust below`,
+      };
+    }
+
+    // Case E: Unrecognized text -> never guess!
+    return {
+      cached: 0,
+      fresh: 0,
+      output: 0,
+      combinedInOut: 0,
+      mode: 'none',
+      note: 'No labeled token counts found — enter Cached / Fresh / Output below',
+    };
   }
 
   function cleanName(rawName, id) {
@@ -424,16 +691,85 @@
     `;
   }
 
+  function renderParseStatus() {
+    if (!el.parseStatus) return;
+
+    if (parseMeta.mode === 'empty' || !el.usageInput.value.trim()) {
+      el.parseStatus.className = 'parse-status hidden';
+      el.parseStatus.innerHTML = '';
+      return;
+    }
+
+    if (parseMeta.mode === 'combined' && parseMeta.combinedInOut > 0) {
+      el.parseStatus.className = 'parse-status is-warn';
+      const chips = [
+        { pct: 0, label: 'All in' },
+        { pct: 10, label: '90/10' },
+        { pct: 20, label: '80/20' },
+        { pct: 30, label: '70/30' },
+      ];
+      el.parseStatus.innerHTML = `
+        <span class="parse-msg">${escapeHtml(parseMeta.note)}</span>
+        <div class="split-chips" role="group" aria-label="Split combined input and output">
+          ${chips
+            .map(
+              (c) =>
+                `<button type="button" class="split-chip ${parseMeta.splitOutPct === c.pct ? 'is-active' : ''}" data-split-out="${c.pct}">${c.label}</button>`
+            )
+            .join('')}
+        </div>
+      `;
+      return;
+    }
+
+    if (parseMeta.mode === 'none') {
+      el.parseStatus.className = 'parse-status is-warn';
+      el.parseStatus.innerHTML = `<span class="parse-msg">${escapeHtml(parseMeta.note)}</span>`;
+      return;
+    }
+
+    el.parseStatus.className = 'parse-status';
+    el.parseStatus.innerHTML = `<span class="parse-msg">${escapeHtml(parseMeta.note)}</span>`;
+  }
+
   function renderSelectedCards(selectedRow) {
     if (!selectedRow) return;
     const { model, calc } = selectedRow;
 
-    // Vermilion Selected Model Hero
+    // Vermilion Selected Model Hero + Live OpenRouter Unit Rates
+    const cacheRate =
+      cacheEnabled && model.pricing.cacheRead !== null ? model.pricing.cacheRead : model.pricing.prompt;
     el.selectedModelPill.textContent = model.name;
     el.heroCost.textContent = formatMoney(calc.total);
     el.hbCached.textContent = formatMoney(calc.cachedCost);
     el.hbFresh.textContent = formatMoney(calc.freshCost);
     el.hbOutput.textContent = formatMoney(calc.outputCost);
+    if (el.rateCached) el.rateCached.textContent = formatUnitRate(cacheRate);
+    if (el.rateFresh) el.rateFresh.textContent = formatUnitRate(model.pricing.prompt);
+    if (el.rateOutput) el.rateOutput.textContent = formatUnitRate(model.pricing.completion);
+
+    // Honest cost range when input + output were pasted combined & unsplit
+    if (el.heroRangeNote) {
+      if (parseMeta.mode === 'combined' && parseMeta.combinedInOut > 0 && parseMeta.splitOutPct === 0) {
+        const minCalc = calculateModelCost(
+          model,
+          { cached: tokens.cached, fresh: parseMeta.combinedInOut, output: 0 },
+          cacheEnabled
+        );
+        const maxCalc = calculateModelCost(
+          model,
+          { cached: tokens.cached, fresh: 0, output: parseMeta.combinedInOut },
+          cacheEnabled
+        );
+        const lo = Math.min(minCalc.total, maxCalc.total);
+        const hi = Math.max(minCalc.total, maxCalc.total);
+        el.heroRangeNote.textContent = `range ${formatMoney(lo)} – ${formatMoney(hi)} (unsplit in/out)`;
+        el.heroRangeNote.classList.remove('hidden');
+      } else {
+        el.heroRangeNote.textContent = '';
+        el.heroRangeNote.classList.add('hidden');
+      }
+    }
 
     // Lavender Cache Savings Card
     el.stepperModelName.textContent = makeShortName(model);
@@ -499,6 +835,7 @@
 
   function renderAll(skipInputSync = false) {
     syncTokenBars(skipInputSync);
+    renderParseStatus();
     if (allModels.length === 0) return;
 
     const displayedIds = [...new Set([...famousIds, ...customPinnedIds])].filter(
@@ -658,7 +995,14 @@
   }
 
   function handlePaste() {
-    tokens = parseUsageText(el.usageInput.value);
+    const parsed = parseUsageText(el.usageInput.value);
+    tokens = { cached: parsed.cached, fresh: parsed.fresh, output: parsed.output };
+    parseMeta = {
+      mode: parsed.mode,
+      combinedInOut: parsed.combinedInOut || 0,
+      splitOutPct: 0,
+      note: parsed.note || '',
+    };
     renderAll(false);
   }
 
@@ -699,6 +1043,7 @@
       if (el.usageInput.value.trim()) {
         el.usageInput.value = '';
         tokens = { cached: 0, fresh: 0, output: 0 };
+        parseMeta = { mode: 'empty', combinedInOut: 0, splitOutPct: 0, note: '' };
         renderAll(false);
       } else {
         el.usageInput.value = SAMPLE_REPORT;
@@ -706,6 +1051,20 @@
       }
       el.usageInput.focus();
     });
+
+    // Quick split chips when pasted text has combined input + output
+    if (el.parseStatus) {
+      el.parseStatus.addEventListener('click', (e) => {
+        const chip = e.target.closest('[data-split-out]');
+        if (!chip || parseMeta.combinedInOut <= 0) return;
+        const pct = Number(chip.dataset.splitOut) || 0;
+        parseMeta.splitOutPct = pct;
+        const outTok = Math.round(parseMeta.combinedInOut * (pct / 100));
+        tokens.output = outTok;
+        tokens.fresh = Math.max(0, parseMeta.combinedInOut - outTok);
+        renderAll(false);
+      });
+    }
 
     // Physical CACHE OFF / ON toggle
     el.cacheToggleBtn.addEventListener('click', () => {
@@ -726,6 +1085,9 @@
       inp.addEventListener('input', () => {
         const parsed = parseTokenAmount(inp.value);
         tokens[key] = parsed !== null ? Math.max(0, parsed) : 0;
+        if (parseMeta.mode !== 'empty') {
+          parseMeta = { mode: 'manual', combinedInOut: 0, splitOutPct: 0, note: 'Adjusted manually' };
+        }
         renderAll(true);
       });
       inp.addEventListener('blur', () => {

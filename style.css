@@ -393,6 +393,57 @@ body {
   box-shadow: inset 0 0 0 1px var(--ink-dark);
 }
 
+/* Transparent Parse Verification / Split Warning */
+.parse-status {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--ink-dark-soft);
+}
+
+.parse-status.is-warn {
+  background-color: var(--ink-dark);
+  color: var(--ink-white);
+  border-radius: 10px;
+  padding: 8px 11px;
+}
+
+.parse-msg {
+  min-width: 0;
+}
+
+.split-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.split-chip {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-white);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.split-chip:hover,
+.split-chip.is-active {
+  background-color: var(--ink-white);
+  border-color: var(--ink-white);
+  color: var(--ink-dark);
+}
+
 .paste-frame textarea {
   display: block;
   width: 100%;
@@ -686,6 +737,23 @@ body {
   color: var(--ink-dark);
   overflow-wrap: break-word;
   min-width: 0;
+}
+
+.hero-range {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dark);
+  opacity: 0.82;
+}
+
+.hb-rate {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-dark-soft);
+  margin-left: 4px;
 }
 
 .hero-breakdown {
